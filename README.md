@@ -36,6 +36,12 @@ python -m backend.main
 
 默认监听 `http://127.0.0.1:8001`，OpenAPI 地址为 `/docs`。MySQL/Redis 基础设施可用 `docker compose -f docker-compose.prod.yml up -d` 启动；通过 `.env` 设置 `DATABASE_URL`、`JWT_SECRET` 和 `REDIS_URL`。
 
+Celery worker（安装生产依赖后）：
+
+```powershell
+celery -A backend.worker.celery_app worker --loglevel=INFO
+```
+
 ## 生产替换边界
 
 当前使用 Python 标准库、SQLite、内存 token 和确定性演示 worker。生产环境应替换为 JWT、PostgreSQL、Redis/Celery、对象存储和真实 AI/平台适配器；系统不会保存明文平台 token/cookie，也不会自动执行投放或扣费。
