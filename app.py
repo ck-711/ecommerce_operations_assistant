@@ -43,7 +43,7 @@ class Handler(BaseHTTPRequestHandler):
             if out:
                 out['competitors']=rows(c,'select * from competitors where product_id=?',(pid,)); out['diagnoses']=rows(c,'select * from product_diagnoses where product_id=? order by id desc',(pid,)); out['plans']=rows(c,'select * from creative_plans where product_id=? order by id desc',(pid,)); out['jobs']=rows(c,'select * from generation_jobs where product_id=? order by id desc',(pid,));
                 for j in out['jobs']: j['events']=rows(c,'select * from generation_job_events where job_id=? order by id',(j['id'],))
-                out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
+                out['skus']=rows(c,'select k.*,coalesce(i.stock_qty,0) stock_qty,coalesce(i.locked_qty,0) locked_qty,coalesce(i.warning_threshold,10) warning_threshold,(coalesce(i.stock_qty,0)<=coalesce(i.warning_threshold,10)) low_stock from product_skus k left join inventory_items i on i.sku_id=k.id where k.product_id=? order by k.id',(pid,)); out['inventory_movements']=rows(c,'select m.* from inventory_movements m join product_skus k on k.id=m.sku_id where k.product_id=? order by m.id desc',(pid,)); out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
         else: out={'code':'not_found','message':'资源不存在','details':{}}
         c.close(); self.send(200 if not isinstance(out,dict) or 'code' not in out else 404,out)
     def do_POST(self):
@@ -59,6 +59,20 @@ class Handler(BaseHTTPRequestHandler):
             c.execute('insert into stores(store_name,platform,owner_name,remark,created_at,updated_at) values(?,?,?,?,?,?)',('演示旗舰店','taobao','演示运营','MVP demo',t,t)); sid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(sid,'轻量防晒伞','taobao','户外用品',79,32,'通勤女性','轻量、遮阳、便携','active',t,t)); pid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into product_skus(product_id,sku_code,sku_name,price) values(?,?,?,?)',(pid,'SKU-DEMO','黑色/标准',79)); sku=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into inventory_items(sku_id,stock_qty,warning_threshold,updated_at) values(?,?,?,?)',(sku,42,10,t)); out={'store_id':sid,'product_id':pid}
         elif p=='/api/v1/stores': c.execute('insert into stores(store_name,platform,owner_name,remark,created_at,updated_at) values(?,?,?,?,?,?)',(data['store_name'],data.get('platform','other'),data.get('owner_name',''),data.get('remark',''),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0]}
         elif p=='/api/v1/products': c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(data['store_id'],data['name'],data.get('platform','other'),data.get('category',''),data.get('price',0),data.get('cost',0),data.get('target_audience',''),data.get('selling_points',''),'draft',t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0]}
+        elif p.endswith('/skus') and '/products/' in p:
+            pid=p.split('/')[4]
+            if one(c,'select id from products where id=?',(pid,)) is None: out={'code':'not_found','message':'商品不存在','details':{}}; status=404
+            elif not data.get('sku_code') or not data.get('sku_name'): out={'code':'validation_error','message':'SKU 编码和名称不能为空','details':{}}; status=400
+            elif one(c,'select id from product_skus where product_id=? and sku_code=?',(pid,data['sku_code'])): out={'code':'conflict','message':'SKU 编码已存在','details':{}}; status=409
+            else:
+                c.execute('insert into product_skus(product_id,sku_code,sku_name,price,status) values(?,?,?,?,?)',(pid,data['sku_code'],data['sku_name'],data.get('price',0),data.get('status','active'))); sid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into inventory_items(sku_id,stock_qty,warning_threshold,updated_at) values(?,?,?,?)',(sid,int(data.get('stock_qty',0)),int(data.get('warning_threshold',10)),t)); out={'id':sid,'sku_code':data['sku_code'],'stock_qty':int(data.get('stock_qty',0))}
+        elif p.endswith('/inventory-adjustments'):
+            bits=p.split('/'); pid,sid=bits[4],bits[6]; sku=one(c,'select k.*,coalesce(i.stock_qty,0) stock_qty from product_skus k left join inventory_items i on i.sku_id=k.id where k.id=? and k.product_id=?',(sid,pid)); change=data.get('change_qty'); reason=str(data.get('reason_text','')).strip()
+            if not sku: out={'code':'not_found','message':'SKU 不存在','details':{}}; status=404
+            elif not isinstance(change,int) or not reason: out={'code':'validation_error','message':'变更数量必须为整数且原因不能为空','details':{}}; status=400
+            elif sku['stock_qty']+change<0: out={'code':'validation_error','message':'库存不能小于 0','details':{}}; status=400
+            else:
+                after=sku['stock_qty']+change; c.execute('update inventory_items set stock_qty=?,updated_at=? where sku_id=?',(after,t,sid)); c.execute('insert into inventory_movements(sku_id,movement_type,change_qty,before_qty,after_qty,reason_text,created_at) values(?,?,?,?,?,?,?)',(sid,'adjustment',change,sku['stock_qty'],after,reason,t)); out={'sku_id':int(sid),'before_qty':sku['stock_qty'],'after_qty':after}
         elif p.endswith('/diagnoses/generate'):
             pid=p.split('/')[4]; d={'positioning':'高性价比通勤防晒单品','price_band':'50-99 元','audience_insights':'一二线城市通勤女性，重视便携与防晒','pain_points':'笨重、收纳不便、遮阳不足','selling_point_analysis':'轻量与便携是核心差异点','risks':'同质化、季节性波动','recommendations':'强化收纳演示，增加防晒效果对比'}; c.execute('insert into product_diagnoses(product_id,positioning,price_band,audience_insights,pain_points,selling_point_analysis,risks,recommendations,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?)',(pid,*d.values(),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],**d}
         elif '/creative-plans/' in p and p.endswith('/generate') and not (p.endswith('/images/generate') or p.endswith('/videos/generate')):
@@ -79,7 +93,15 @@ class Handler(BaseHTTPRequestHandler):
         p=urlparse(self.path).path; data=self.body(); u=self.auth(True)
         if not u:return
         c=db(); t=now(); out=None; status=200
-        if '/assets/' in p:
+        if '/skus/' in p and '/assets/' not in p:
+            bits=p.split('/'); pid,sid=bits[4],bits[6]; sku=one(c,'select * from product_skus where id=? and product_id=?',(sid,pid))
+            if not sku: out={'code':'not_found','message':'SKU 不存在','details':{}}; status=404
+            elif data.get('status') not in (None,'active','inactive') or ('price' in data and float(data['price'])<0) or ('warning_threshold' in data and int(data['warning_threshold'])<0): out={'code':'validation_error','message':'SKU 状态、价格或预警阈值无效','details':{}}; status=400
+            else:
+                c.execute('update product_skus set sku_name=coalesce(?,sku_name),price=coalesce(?,price),status=coalesce(?,status) where id=?',(data.get('sku_name'),data.get('price'),data.get('status'),sid));
+                if 'warning_threshold' in data: c.execute('update inventory_items set warning_threshold=?,updated_at=? where sku_id=?',(int(data['warning_threshold']),t,sid))
+                out=one(c,'select k.*,i.stock_qty,i.warning_threshold from product_skus k join inventory_items i on i.sku_id=k.id where k.id=?',(sid,))
+        elif '/assets/' in p:
             bits=p.split('/'); pid,aid=bits[4],bits[6]; asset=one(c,'select * from generated_assets where id=? and product_id=?',(aid,pid))
             if not asset: out={'code':'not_found','message':'素材不存在','details':{}}; status=404
             elif data.get('review_status') not in (None,'pending','approved','rejected') or (data.get('score') is not None and not 0<=float(data['score'])<=5): out={'code':'validation_error','message':'审核状态或评分无效','details':{}}; status=400
