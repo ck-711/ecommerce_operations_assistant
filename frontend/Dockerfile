@@ -1,4 +1,4 @@
-FROM nginx:1.27-alpine
+FROM docker.m.daocloud.io/library/nginx:1.27-alpine
 COPY web /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
