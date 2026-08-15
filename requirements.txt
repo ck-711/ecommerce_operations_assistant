@@ -1,0 +1,1 @@
+# MVP uses only Python standard library. Production adapters may add FastAPI/SQLAlchemy.
