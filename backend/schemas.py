@@ -35,6 +35,37 @@ class StoreOut(StoreCreate):
     id: int
     model_config = {'from_attributes': True}
 
+class DiagnosisOut(BaseModel):
+    id: int
+    product_id: int
+    positioning: str
+    recommendations: str
+    model_config = {'from_attributes': True}
+
+class CreativePlanCreate(BaseModel):
+    plan_type: str = Field(pattern='^(main-images|video-scripts)$')
+    title: str = Field(min_length=1, max_length=200)
+    content_json: str = '[]'
+
+class CreativePlanOut(CreativePlanCreate):
+    id: int
+    product_id: int
+    status: str
+    model_config = {'from_attributes': True}
+
+class AssetReview(BaseModel):
+    review_status: str = Field(pattern='^(pending|approved|rejected)$')
+    score: float | None = Field(default=None, ge=0, le=5)
+
+class AssetOut(BaseModel):
+    id: int
+    product_id: int
+    asset_type: str
+    asset_url: str
+    review_status: str
+    score: float | None
+    model_config = {'from_attributes': True}
+
 class ProductOut(ProductCreate):
     id: int
     status: str

@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store
-from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut
+from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store, ProductDiagnosis, CreativePlan, GeneratedAsset
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut
 from backend.worker import execute_generation_job
 
 router = APIRouter(prefix='/api/v1')
@@ -47,6 +47,31 @@ def stores(user: User = Depends(current_user), db: Session = Depends(get_db)):
 def create_store(body: StoreCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
     store=Store(**body.model_dump()); db.add(store); db.commit(); db.refresh(store); return store
+
+@router.post('/products/{product_id}/diagnoses', response_model=DiagnosisOut, status_code=status.HTTP_201_CREATED)
+def create_diagnosis(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
+    item=ProductDiagnosis(product_id=product_id,positioning='待模型分析',recommendations='待模型分析'); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.get('/products/{product_id}/diagnoses', response_model=list[DiagnosisOut])
+def diagnoses(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)): return list(db.scalars(select(ProductDiagnosis).where(ProductDiagnosis.product_id==product_id).order_by(ProductDiagnosis.id.desc())))
+
+@router.post('/products/{product_id}/creative-plans', response_model=CreativePlanOut, status_code=status.HTTP_201_CREATED)
+def create_plan(product_id: int, body: CreativePlanCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
+    item=CreativePlan(product_id=product_id,**body.model_dump()); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.get('/products/{product_id}/assets', response_model=list[AssetOut])
+def assets(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)): return list(db.scalars(select(GeneratedAsset).where(GeneratedAsset.product_id==product_id).order_by(GeneratedAsset.id.desc())))
+
+@router.patch('/products/{product_id}/assets/{asset_id}', response_model=AssetOut)
+def review_asset(product_id: int, asset_id: int, body: AssetReview, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=db.scalar(select(GeneratedAsset).where(GeneratedAsset.id==asset_id,GeneratedAsset.product_id==product_id))
+    if not item: raise HTTPException(status_code=404, detail={'code':'not_found','message':'素材不存在'})
+    item.review_status=body.review_status; item.score=body.score; db.commit(); db.refresh(item); return item
 
 @router.get('/products', response_model=list[ProductOut])
 def products(user: User = Depends(current_user), db: Session = Depends(get_db)):

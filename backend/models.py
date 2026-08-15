@@ -30,6 +30,32 @@ class Store(Base):
     owner_name: Mapped[str] = mapped_column(String(120), default='')
     remark: Mapped[str] = mapped_column(String(500), default='')
 
+class ProductDiagnosis(Base):
+    __tablename__ = 'product_diagnoses'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    positioning: Mapped[str] = mapped_column(String(1000), default='')
+    recommendations: Mapped[str] = mapped_column(String(2000), default='')
+
+class CreativePlan(Base):
+    __tablename__ = 'creative_plans'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    plan_type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(200))
+    content_json: Mapped[str] = mapped_column(String(10000), default='[]')
+    status: Mapped[str] = mapped_column(String(30), default='draft')
+
+class GeneratedAsset(Base):
+    __tablename__ = 'generated_assets'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey('generation_jobs.id'), nullable=True)
+    asset_type: Mapped[str] = mapped_column(String(30))
+    asset_url: Mapped[str] = mapped_column(String(500))
+    review_status: Mapped[str] = mapped_column(String(30), default='pending')
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
 class ProductSku(Base):
     __tablename__ = 'product_skus'
     id: Mapped[int] = mapped_column(primary_key=True)
