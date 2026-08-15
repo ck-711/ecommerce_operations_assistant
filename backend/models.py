@@ -22,6 +22,14 @@ class Product(Base):
     cost: Mapped[float] = mapped_column(Float, default=0)
     status: Mapped[str] = mapped_column(String(30), default='draft')
 
+class Store(Base):
+    __tablename__ = 'stores'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    store_name: Mapped[str] = mapped_column(String(160))
+    platform: Mapped[str] = mapped_column(String(50), default='other')
+    owner_name: Mapped[str] = mapped_column(String(120), default='')
+    remark: Mapped[str] = mapped_column(String(500), default='')
+
 class ProductSku(Base):
     __tablename__ = 'product_skus'
     id: Mapped[int] = mapped_column(primary_key=True)

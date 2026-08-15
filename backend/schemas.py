@@ -25,6 +25,16 @@ class ProductCreate(BaseModel):
     price: float = Field(default=0, ge=0)
     cost: float = Field(default=0, ge=0)
 
+class StoreCreate(BaseModel):
+    store_name: str = Field(min_length=1, max_length=160)
+    platform: str = 'other'
+    owner_name: str = ''
+    remark: str = ''
+
+class StoreOut(StoreCreate):
+    id: int
+    model_config = {'from_attributes': True}
+
 class ProductOut(ProductCreate):
     id: int
     status: str

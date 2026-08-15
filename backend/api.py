@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob
-from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut
+from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut
 from backend.worker import execute_generation_job
 
 router = APIRouter(prefix='/api/v1')
@@ -38,6 +38,15 @@ def me(user: User = Depends(current_user)): return user
 def users(user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role != 'admin': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'仅管理员可查看用户'})
     return list(db.scalars(select(User).order_by(User.id)))
+
+@router.get('/stores', response_model=list[StoreOut])
+def stores(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return list(db.scalars(select(Store).order_by(Store.id.desc())))
+
+@router.post('/stores', response_model=StoreOut, status_code=status.HTTP_201_CREATED)
+def create_store(body: StoreCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    store=Store(**body.model_dump()); db.add(store); db.commit(); db.refresh(store); return store
 
 @router.get('/products', response_model=list[ProductOut])
 def products(user: User = Depends(current_user), db: Session = Depends(get_db)):
