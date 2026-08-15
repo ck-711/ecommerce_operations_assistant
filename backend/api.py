@@ -75,3 +75,7 @@ def create_generation_job(product_id: int, body: GenerationJobCreate, user: User
     job=GenerationJob(product_id=product_id,job_kind=body.job_kind,job_status='pending'); db.add(job); db.commit(); db.refresh(job)
     execute_generation_job.delay(job.id, product_id, body.job_kind)
     return job
+
+@router.get('/products/{product_id}/generation-jobs', response_model=list[GenerationJobOut])
+def generation_jobs(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return list(db.scalars(select(GenerationJob).where(GenerationJob.product_id==product_id).order_by(GenerationJob.id.desc())))

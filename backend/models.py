@@ -47,3 +47,10 @@ class GenerationJob(Base):
     job_status: Mapped[str] = mapped_column(String(30), default='pending')
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+class GenerationJobEvent(Base):
+    __tablename__ = 'generation_job_events'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey('generation_jobs.id'), index=True)
+    event_type: Mapped[str] = mapped_column(String(40))
+    event_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
