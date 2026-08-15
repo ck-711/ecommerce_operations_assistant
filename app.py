@@ -48,6 +48,9 @@ class Handler(BaseHTTPRequestHandler):
         if not u:return
         c=db()
         if p=='/api/v1/auth/me': out=u
+        elif p=='/api/v1/users':
+            if u['role']!='admin': out={'code':'forbidden','message':'仅管理员可查看用户','details':{}}
+            else: out=rows(c,'select id,username,display_name,role,status from users order by id')
         elif p=='/api/v1/workspace/dashboard': out={'stores':c.execute('select count(*) n from stores').fetchone()['n'],'products':c.execute('select count(*) n from products').fetchone()['n'],'low_stock_skus':c.execute('select count(*) n from inventory_items where stock_qty<=warning_threshold').fetchone()['n'],'pending_assets':c.execute('select count(*) n from generated_assets where review_status="pending"').fetchone()['n']}
         elif p=='/api/v1/stores': out=rows(c,'select * from stores order by id desc')
         elif p.startswith('/api/v1/stores/'):
@@ -59,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
             if out:
                 out['competitors']=rows(c,'select * from competitors where product_id=?',(pid,)); out['diagnoses']=rows(c,'select * from product_diagnoses where product_id=? order by id desc',(pid,)); out['plans']=rows(c,'select * from creative_plans where product_id=? order by id desc',(pid,)); out['jobs']=rows(c,'select * from generation_jobs where product_id=? order by id desc',(pid,));
                 for j in out['jobs']: j['events']=rows(c,'select * from generation_job_events where job_id=? order by id',(j['id'],))
-                out['skus']=rows(c,'select k.*,coalesce(i.stock_qty,0) stock_qty,coalesce(i.locked_qty,0) locked_qty,coalesce(i.warning_threshold,10) warning_threshold,(coalesce(i.stock_qty,0)<=coalesce(i.warning_threshold,10)) low_stock from product_skus k left join inventory_items i on i.sku_id=k.id where k.product_id=? order by k.id',(pid,)); out['inventory_movements']=rows(c,'select m.* from inventory_movements m join product_skus k on k.id=m.sku_id where k.product_id=? order by m.id desc',(pid,)); out['links']=rows(c,'select * from promotion_links where product_id=? order by id desc',(pid,)); out['ad_recommendations']=rows(c,'select * from ad_recommendations where product_id=? order by id desc',(pid,)); out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
+                out['skus']=rows(c,'select k.*,coalesce(i.stock_qty,0) stock_qty,coalesce(i.locked_qty,0) locked_qty,coalesce(i.warning_threshold,10) warning_threshold,(coalesce(i.stock_qty,0)<=coalesce(i.warning_threshold,10)) low_stock from product_skus k left join inventory_items i on i.sku_id=k.id where k.product_id=? order by k.id',(pid,)); out['inventory_movements']=rows(c,'select m.* from inventory_movements m join product_skus k on k.id=m.sku_id where k.product_id=? order by m.id desc',(pid,)); out['links']=rows(c,'select * from promotion_links where product_id=? order by id desc',(pid,)); out['ad_recommendations']=rows(c,'select * from ad_recommendations where product_id=? order by id desc',(pid,)); out['ad_experiments']=rows(c,'select * from ad_experiments where product_id=? order by id desc',(pid,)); out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
         else: out={'code':'not_found','message':'资源不存在','details':{}}
         c.close(); self.send(200 if not isinstance(out,dict) or 'code' not in out else 404,out)
     def do_POST(self):
@@ -114,6 +117,10 @@ class Handler(BaseHTTPRequestHandler):
             pid=p.split('/')[4]; code=uuid.uuid4().hex[:10]; c.execute('insert into promotion_links(product_id,link_name,target_url,tracking_code,scene_text,created_at) values(?,?,?,?,?,?)',(pid,data['link_name'],data['target_url'],code,data.get('scene_text',''),t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],'tracking_code':code}
         elif p.endswith('/ad-recommendations/generate'):
             pid=p.split('/')[4]; rec={'summary_text':'先小预算测试高意向通勤人群，再根据转化扩量','objective_text':'提升商品详情页转化','audience_segments':['通勤女性','户外出行人群'],'budget_plan':{'daily':100,'test_days':3},'confirm_status':'pending'}; c.execute('insert into ad_recommendations(product_id,summary_text,objective_text,audience_segments_json,budget_plan_json,created_at) values(?,?,?,?,?,?)',(pid,rec['summary_text'],rec['objective_text'],jdump(rec['audience_segments']),jdump(rec['budget_plan']),t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],**rec}
+        elif p.endswith('/platform-accounts'):
+            sid=p.split('/')[4]; c.execute('insert into platform_accounts(store_id,platform,account_name,auth_status,auth_meta_json,remark,created_at,updated_at) values(?,?,?,?,?,?,?,?)',(sid,data['platform'],data['account_name'],'not_connected',jdump({'provider':'placeholder'}),data.get('remark',''),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],'auth_status':'not_connected'}
+        elif p.endswith('/ad-experiments'):
+            pid=p.split('/')[4]; c.execute('insert into ad_experiments(product_id,experiment_name,target_text,audience_text,budget_amount,success_metric_text,hypothesis_text,created_at,updated_at) values(?,?,?,?,?,?,?,?,?)',(pid,data['experiment_name'],data.get('target_text',''),data.get('audience_text',''),data.get('budget_amount',0),data.get('success_metric_text',''),data.get('hypothesis_text',''),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],'experiment_status':'draft'}
         elif p.endswith('/diagnoses/generate'):
             pid=p.split('/')[4]; d={'positioning':'高性价比通勤防晒单品','price_band':'50-99 元','audience_insights':'一二线城市通勤女性，重视便携与防晒','pain_points':'笨重、收纳不便、遮阳不足','selling_point_analysis':'轻量与便携是核心差异点','risks':'同质化、季节性波动','recommendations':'强化收纳演示，增加防晒效果对比'}; c.execute('insert into product_diagnoses(product_id,positioning,price_band,audience_insights,pain_points,selling_point_analysis,risks,recommendations,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?)',(pid,*d.values(),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],**d}
         elif '/creative-plans/' in p and p.endswith('/generate') and not (p.endswith('/images/generate') or p.endswith('/videos/generate')):
@@ -134,7 +141,18 @@ class Handler(BaseHTTPRequestHandler):
         p=urlparse(self.path).path; data=self.body(); u=self.auth(True)
         if not u:return
         c=db(); t=now(); out=None; status=200
-        if '/skus/' in p and '/assets/' not in p:
+        if '/ad-recommendations/' in p and p.endswith('/confirmation'):
+            bits=p.split('/'); pid,rid=bits[4],bits[6]; status_value=data.get('confirm_status'); rec=one(c,'select * from ad_recommendations where id=? and product_id=?',(rid,pid))
+            if not rec: out={'code':'not_found','message':'投放建议不存在','details':{}}; status=404
+            elif status_value not in ('confirmed','rejected'): out={'code':'validation_error','message':'确认状态无效','details':{}}; status=400
+            else: c.execute('update ad_recommendations set confirm_status=? where id=?',(status_value,rid)); out={'id':int(rid),'confirm_status':status_value}
+        elif '/ad-experiments/' in p:
+            bits=p.split('/'); pid,eid=bits[4],bits[6]; exp=one(c,'select * from ad_experiments where id=? and product_id=?',(eid,pid)); new_status=data.get('experiment_status')
+            allowed={'draft':('confirmed','cancelled'),'confirmed':('running','cancelled'),'running':('finished','cancelled'),'finished':(),'cancelled':()}
+            if not exp: out={'code':'not_found','message':'投放实验不存在','details':{}}; status=404
+            elif new_status not in allowed.get(exp['experiment_status'],()): out={'code':'invalid_transition','message':'实验状态流转不允许','details':{'from':exp['experiment_status'],'to':new_status}}; status=400
+            else: c.execute('update ad_experiments set experiment_status=?,updated_at=? where id=?',(new_status,t,eid)); out={'id':int(eid),'experiment_status':new_status}
+        elif '/skus/' in p and '/assets/' not in p:
             bits=p.split('/'); pid,sid=bits[4],bits[6]; sku=one(c,'select * from product_skus where id=? and product_id=?',(sid,pid))
             if not sku: out={'code':'not_found','message':'SKU 不存在','details':{}}; status=404
             elif data.get('status') not in (None,'active','inactive') or ('price' in data and float(data['price'])<0) or ('warning_threshold' in data and int(data['warning_threshold'])<0): out={'code':'validation_error','message':'SKU 状态、价格或预警阈值无效','details':{}}; status=400
