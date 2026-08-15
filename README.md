@@ -49,6 +49,8 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up --build
 ```
 
+前端切换到生产 API：在浏览器控制台执行 `window.API_BASE='http://127.0.0.1:8001/api/v1'` 后刷新页面；正式前端构建时将该值写入环境配置。
+
 ## 生产替换边界
 
 当前使用 Python 标准库、SQLite、内存 token 和确定性演示 worker。生产环境应替换为 JWT、PostgreSQL、Redis/Celery、对象存储和真实 AI/平台适配器；系统不会保存明文平台 token/cookie，也不会自动执行投放或扣费。
