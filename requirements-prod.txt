@@ -8,3 +8,4 @@ redis>=5.0
 celery>=5.4
 pydantic-settings>=2.4
 langgraph>=0.2
+openai>=1.50

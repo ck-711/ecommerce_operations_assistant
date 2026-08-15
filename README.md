@@ -53,6 +53,8 @@ docker compose -f docker-compose.prod.yml up --build
 
 生产 AI 工作流要求安装并配置真实 Provider：`AI_PROVIDER` 默认为 `openai`，未配置真实适配器会明确报错；仅本地测试可设置 `AI_PROVIDER=demo`。
 
+OpenAI Provider 配置：`OPENAI_API_KEY`、可选 `OPENAI_BASE_URL`、可选 `OPENAI_MODEL`（默认 `gpt-4o-mini`）。
+
 ## 生产替换边界
 
 当前使用 Python 标准库、SQLite、内存 token 和确定性演示 worker。生产环境应替换为 JWT、PostgreSQL、Redis/Celery、对象存储和真实 AI/平台适配器；系统不会保存明文平台 token/cookie，也不会自动执行投放或扣费。
