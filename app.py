@@ -1,4 +1,4 @@
-import hashlib, json, os, sqlite3, threading, time, uuid
+import csv, hashlib, io, json, os, sqlite3, threading, time, uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -17,6 +17,18 @@ def rows(c,sql,args=()): return [dict(x) for x in c.execute(sql,args).fetchall()
 def one(c,sql,args=()):
     x=c.execute(sql,args).fetchone(); return dict(x) if x else None
 def jdump(x): return json.dumps(x,ensure_ascii=False)
+def import_rows(kind,text,c):
+    required={'products':['store_id','name'],'sku-inventory':['product_id','sku_code','sku_name'],'performance-records':['product_id','period_start','period_end']}[kind]; parsed=[]; errors=[]
+    for i,row in enumerate(csv.DictReader(io.StringIO(text)),2):
+        miss=[x for x in required if not row.get(x)]
+        try:
+            if kind=='products' and row.get('store_id') and not one(c,'select id from stores where id=?',(row['store_id'],)): miss.append('store_id 不存在')
+            if kind=='sku-inventory' and row.get('product_id') and not one(c,'select id from products where id=?',(row['product_id'],)): miss.append('product_id 不存在')
+            for k in ('price','cost','stock_qty','warning_threshold','impressions','clicks','conversions','spend','revenue'):
+                if row.get(k): float(row[k])
+        except ValueError: miss.append('数值字段格式错误')
+        (errors if miss else parsed).append({'row':i,'data':row,'errors':miss} if miss else row)
+    return parsed,errors
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def send(self,status,data,ctype='application/json'):
@@ -36,6 +48,7 @@ class Handler(BaseHTTPRequestHandler):
         if not u:return
         c=db()
         if p=='/api/v1/auth/me': out=u
+        elif p=='/api/v1/workspace/dashboard': out={'stores':c.execute('select count(*) n from stores').fetchone()['n'],'products':c.execute('select count(*) n from products').fetchone()['n'],'low_stock_skus':c.execute('select count(*) n from inventory_items where stock_qty<=warning_threshold').fetchone()['n'],'pending_assets':c.execute('select count(*) n from generated_assets where review_status="pending"').fetchone()['n']}
         elif p=='/api/v1/stores': out=rows(c,'select * from stores order by id desc')
         elif p=='/api/v1/products': out=rows(c,'select p.*,s.store_name from products p join stores s on s.id=p.store_id order by p.id desc')
         elif p.startswith('/api/v1/products/'):
@@ -55,7 +68,23 @@ class Handler(BaseHTTPRequestHandler):
         u=self.auth(True)
         if not u:return
         c=db(); t=now(); out=None; status=201
-        if p=='/api/v1/workspace/demo-data':
+        if p.startswith('/api/v1/workspace/imports/'):
+            bits=p.split('/'); kind=bits[5]; mode=bits[6]; parsed,errors=import_rows(kind,str(data.get('csv_text','')),c)
+            if mode=='preview': out={'valid_rows':len(parsed),'error_rows':len(errors),'errors':errors}; status=200
+            elif mode=='commit':
+                success=0; commit_errors=list(errors)
+                for row in parsed:
+                    try:
+                        if kind=='products': c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(row['store_id'],row['name'],row.get('platform','other'),row.get('category',''),float(row.get('price') or 0),float(row.get('cost') or 0),row.get('target_audience',''),row.get('selling_points',''),'draft',t,t))
+                        elif kind=='sku-inventory':
+                            if one(c,'select id from product_skus where product_id=? and sku_code=?',(row['product_id'],row['sku_code'])): raise ValueError('SKU 编码已存在')
+                            c.execute('insert into product_skus(product_id,sku_code,sku_name,price) values(?,?,?,?)',(row['product_id'],row['sku_code'],row['sku_name'],float(row.get('price') or 0))); sid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into inventory_items(sku_id,stock_qty,warning_threshold,updated_at) values(?,?,?,?)',(sid,int(float(row.get('stock_qty') or 0)),int(float(row.get('warning_threshold') or 10)),t))
+                        else: c.execute('insert into performance_records(product_id,period_start,period_end,impressions,clicks,conversions,spend,revenue,notes,created_at) values(?,?,?,?,?,?,?,?,?,?)',(row['product_id'],row['period_start'],row['period_end'],int(float(row.get('impressions') or 0)),int(float(row.get('clicks') or 0)),int(float(row.get('conversions') or 0)),float(row.get('spend') or 0),float(row.get('revenue') or 0),row.get('notes',''),t))
+                        success+=1
+                    except (ValueError,sqlite3.IntegrityError) as e: commit_errors.append({'row':row.get('row','?'),'data':row,'errors':[str(e)]})
+                out={'success_count':success,'error_count':len(commit_errors),'errors':commit_errors}; status=200
+            else: out={'code':'not_found','message':'导入模式不存在','details':{}}; status=404
+        elif p=='/api/v1/workspace/demo-data':
             c.execute('insert into stores(store_name,platform,owner_name,remark,created_at,updated_at) values(?,?,?,?,?,?)',('演示旗舰店','taobao','演示运营','MVP demo',t,t)); sid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(sid,'轻量防晒伞','taobao','户外用品',79,32,'通勤女性','轻量、遮阳、便携','active',t,t)); pid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into product_skus(product_id,sku_code,sku_name,price) values(?,?,?,?)',(pid,'SKU-DEMO','黑色/标准',79)); sku=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into inventory_items(sku_id,stock_qty,warning_threshold,updated_at) values(?,?,?,?)',(sku,42,10,t)); out={'store_id':sid,'product_id':pid}
         elif p=='/api/v1/stores': c.execute('insert into stores(store_name,platform,owner_name,remark,created_at,updated_at) values(?,?,?,?,?,?)',(data['store_name'],data.get('platform','other'),data.get('owner_name',''),data.get('remark',''),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0]}
         elif p=='/api/v1/products': c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(data['store_id'],data['name'],data.get('platform','other'),data.get('category',''),data.get('price',0),data.get('cost',0),data.get('target_audience',''),data.get('selling_points',''),'draft',t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0]}
