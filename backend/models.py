@@ -56,6 +56,24 @@ class GeneratedAsset(Base):
     review_status: Mapped[str] = mapped_column(String(30), default='pending')
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+class PerformanceRecord(Base):
+    __tablename__ = 'performance_records'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    period_start: Mapped[str] = mapped_column(String(20)); period_end: Mapped[str] = mapped_column(String(20))
+    impressions: Mapped[int] = mapped_column(Integer, default=0); clicks: Mapped[int] = mapped_column(Integer, default=0); conversions: Mapped[int] = mapped_column(Integer, default=0)
+    spend: Mapped[float] = mapped_column(Float, default=0); revenue: Mapped[float] = mapped_column(Float, default=0)
+
+class PromotionLink(Base):
+    __tablename__ = 'promotion_links'
+    id: Mapped[int] = mapped_column(primary_key=True); product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    link_name: Mapped[str] = mapped_column(String(160)); target_url: Mapped[str] = mapped_column(String(500)); tracking_code: Mapped[str] = mapped_column(String(40), unique=True)
+
+class AdExperiment(Base):
+    __tablename__ = 'ad_experiments'
+    id: Mapped[int] = mapped_column(primary_key=True); product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    experiment_name: Mapped[str] = mapped_column(String(200)); experiment_status: Mapped[str] = mapped_column(String(30), default='draft')
+
 class ProductSku(Base):
     __tablename__ = 'product_skus'
     id: Mapped[int] = mapped_column(primary_key=True)

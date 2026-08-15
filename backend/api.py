@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store, ProductDiagnosis, CreativePlan, GeneratedAsset
-from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut
+from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store, ProductDiagnosis, CreativePlan, GeneratedAsset, PerformanceRecord, PromotionLink, AdExperiment
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut, PerformanceCreate, PerformanceOut, PromotionLinkCreate, PromotionLinkOut, ExperimentCreate, ExperimentOut
+import uuid
 from backend.worker import execute_generation_job
 
 router = APIRouter(prefix='/api/v1')
@@ -72,6 +73,21 @@ def review_asset(product_id: int, asset_id: int, body: AssetReview, user: User =
     item=db.scalar(select(GeneratedAsset).where(GeneratedAsset.id==asset_id,GeneratedAsset.product_id==product_id))
     if not item: raise HTTPException(status_code=404, detail={'code':'not_found','message':'素材不存在'})
     item.review_status=body.review_status; item.score=body.score; db.commit(); db.refresh(item); return item
+
+@router.post('/products/{product_id}/performance-records', response_model=PerformanceOut, status_code=status.HTTP_201_CREATED)
+def performance(product_id: int, body: PerformanceCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=PerformanceRecord(product_id=product_id,**body.model_dump()); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.post('/products/{product_id}/promotion-links', response_model=PromotionLinkOut, status_code=status.HTTP_201_CREATED)
+def promotion_link(product_id: int, body: PromotionLinkCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=PromotionLink(product_id=product_id,**body.model_dump(),tracking_code=uuid.uuid4().hex[:10]); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.post('/products/{product_id}/ad-experiments', response_model=ExperimentOut, status_code=status.HTTP_201_CREATED)
+def experiment(product_id: int, body: ExperimentCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=AdExperiment(product_id=product_id,experiment_name=body.experiment_name); db.add(item); db.commit(); db.refresh(item); return item
 
 @router.get('/products', response_model=list[ProductOut])
 def products(user: User = Depends(current_user), db: Session = Depends(get_db)):

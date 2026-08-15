@@ -66,6 +66,19 @@ class AssetOut(BaseModel):
     score: float | None
     model_config = {'from_attributes': True}
 
+class PerformanceCreate(BaseModel):
+    period_start: str; period_end: str; impressions: int = Field(default=0, ge=0); clicks: int = Field(default=0, ge=0); conversions: int = Field(default=0, ge=0); spend: float = Field(default=0, ge=0); revenue: float = Field(default=0, ge=0)
+class PerformanceOut(PerformanceCreate):
+    id: int; product_id: int; model_config = {'from_attributes': True}
+class PromotionLinkCreate(BaseModel):
+    link_name: str = Field(min_length=1); target_url: str = Field(min_length=1)
+class PromotionLinkOut(PromotionLinkCreate):
+    id: int; product_id: int; tracking_code: str; model_config = {'from_attributes': True}
+class ExperimentCreate(BaseModel):
+    experiment_name: str = Field(min_length=1)
+class ExperimentOut(ExperimentCreate):
+    id: int; product_id: int; experiment_status: str; model_config = {'from_attributes': True}
+
 class ProductOut(ProductCreate):
     id: int
     status: str
