@@ -19,4 +19,4 @@
 
 ## Next slice
 
-增加 Alembic 初始迁移、Celery app/任务基类、Redis health check、Docker API 服务和商品/库存路由迁移。
+已增加 Alembic 初始迁移、Celery app/任务基类、Redis health check、Docker API 服务和商品/库存路由迁移。下一步是接入真实 AI Provider、完善全量业务表迁移和 CI/CD。
