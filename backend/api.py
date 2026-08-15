@@ -9,6 +9,7 @@ from backend.models import User, Product, ProductSku, InventoryItem, GenerationJ
 from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut, PerformanceCreate, PerformanceOut, PromotionLinkCreate, PromotionLinkOut, ExperimentCreate, ExperimentOut, AdRecommendationOut, ReviewReportOut, Confirmation
 import uuid
 from backend.worker import execute_generation_job
+from backend.ai_provider import get_ai_provider
 
 router = APIRouter(prefix='/api/v1')
 bearer = HTTPBearer(auto_error=False)
@@ -53,7 +54,7 @@ def create_store(body: StoreCreate, user: User = Depends(current_user), db: Sess
 def create_diagnosis(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
     if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
-    item=ProductDiagnosis(product_id=product_id,positioning='待模型分析',recommendations='待模型分析'); db.add(item); db.commit(); db.refresh(item); return item
+    product=db.get(Product, product_id); result=get_ai_provider().diagnose_product(product.name, product.category); item=ProductDiagnosis(product_id=product_id,positioning=result['positioning'],recommendations=result['recommendations']); db.add(item); db.commit(); db.refresh(item); return item
 
 @router.get('/products/{product_id}/diagnoses', response_model=list[DiagnosisOut])
 def diagnoses(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)): return list(db.scalars(select(ProductDiagnosis).where(ProductDiagnosis.product_id==product_id).order_by(ProductDiagnosis.id.desc())))
@@ -104,7 +105,7 @@ def confirm_recommendation(product_id: int, recommendation_id: int, body: Confir
 @router.post('/products/{product_id}/review-reports/generate', response_model=ReviewReportOut, status_code=status.HTTP_201_CREATED)
 def review_report(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
-    item=ReviewReport(product_id=product_id,summary_text='复盘报告已生成：请结合曝光、点击、转化和 ROI 调整下一轮素材测试。'); db.add(item); db.commit(); db.refresh(item); return item
+    product=db.get(Product, product_id); result=get_ai_provider().generate_review(product.name,{}); item=ReviewReport(product_id=product_id,summary_text=result['summary']); db.add(item); db.commit(); db.refresh(item); return item
 
 @router.get('/products', response_model=list[ProductOut])
 def products(user: User = Depends(current_user), db: Session = Depends(get_db)):
