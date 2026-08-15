@@ -1,4 +1,10 @@
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on: [api]
+    ports: ["8080:80"]
   api:
     build: .
     environment:

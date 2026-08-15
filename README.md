@@ -49,6 +49,8 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up --build
 ```
 
+完整前后端入口：`http://127.0.0.1:8080/`；FastAPI 文档：`http://127.0.0.1:8001/docs`。
+
 前端切换到生产 API：在浏览器控制台执行 `localStorage.setItem('API_BASE','http://127.0.0.1:8001/api/v1'); location.reload()`；恢复同源演示可执行 `localStorage.removeItem('API_BASE'); location.reload()`。
 
 生产 AI 工作流要求安装并配置真实 Provider：`AI_PROVIDER` 默认为 `openai`，未配置真实适配器会明确报错；仅本地测试可设置 `AI_PROVIDER=demo`。
