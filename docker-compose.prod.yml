@@ -8,6 +8,15 @@ services:
       REDIS_URL: redis://redis:6379/0
     depends_on: [mysql, redis]
     ports: ["8001:8001"]
+  worker:
+    build: .
+    command: celery -A backend.worker.celery_app worker --loglevel=INFO
+    environment:
+      ENVIRONMENT: production
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
+      DATABASE_URL: mysql+pymysql://ecommerce:ecommerce@mysql:3306/ecommerce
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [mysql, redis]
   mysql:
     image: docker.m.daocloud.io/library/mysql:8.4
     environment:
