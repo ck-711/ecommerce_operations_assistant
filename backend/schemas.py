@@ -46,3 +46,14 @@ class SkuOut(SkuCreate):
 class InventoryAdjustment(BaseModel):
     change_qty: int
     reason_text: str = Field(min_length=1, max_length=300)
+
+class GenerationJobCreate(BaseModel):
+    job_kind: str = Field(pattern='^(image|video)$')
+
+class GenerationJobOut(BaseModel):
+    id: int
+    product_id: int
+    job_kind: str
+    job_status: str
+    attempts: int
+    model_config = {'from_attributes': True}

@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User, Product, ProductSku, InventoryItem
-from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment
+from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut
+from backend.worker import execute_generation_job
 
 router = APIRouter(prefix='/api/v1')
 bearer = HTTPBearer(auto_error=False)
@@ -66,3 +67,11 @@ def adjust_inventory(product_id: int, sku_id: int, body: InventoryAdjustment, us
     after=item.stock_qty+body.change_qty
     if after<0: raise HTTPException(status_code=400, detail={'code':'validation_error','message':'库存不能小于 0'})
     before=item.stock_qty; item.stock_qty=after; db.commit(); return {'sku_id':sku_id,'before_qty':before,'after_qty':after}
+
+@router.post('/products/{product_id}/generation-jobs', response_model=GenerationJobOut, status_code=status.HTTP_202_ACCEPTED)
+def create_generation_job(product_id: int, body: GenerationJobCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
+    job=GenerationJob(product_id=product_id,job_kind=body.job_kind,job_status='pending'); db.add(job); db.commit(); db.refresh(job)
+    execute_generation_job.delay(job.id, product_id, body.job_kind)
+    return job

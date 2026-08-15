@@ -38,3 +38,12 @@ class InventoryItem(Base):
     stock_qty: Mapped[int] = mapped_column(Integer, default=0)
     locked_qty: Mapped[int] = mapped_column(Integer, default=0)
     warning_threshold: Mapped[int] = mapped_column(Integer, default=10)
+
+class GenerationJob(Base):
+    __tablename__ = 'generation_jobs'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    job_kind: Mapped[str] = mapped_column(String(40))
+    job_status: Mapped[str] = mapped_column(String(30), default='pending')
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
