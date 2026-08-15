@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User
-from backend.schemas import LoginRequest, TokenResponse, UserOut
+from backend.models import User, Product, ProductSku, InventoryItem
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment
 
 router = APIRouter(prefix='/api/v1')
 bearer = HTTPBearer(auto_error=False)
@@ -37,3 +37,32 @@ def me(user: User = Depends(current_user)): return user
 def users(user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role != 'admin': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'仅管理员可查看用户'})
     return list(db.scalars(select(User).order_by(User.id)))
+
+@router.get('/products', response_model=list[ProductOut])
+def products(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return list(db.scalars(select(Product).order_by(Product.id.desc())))
+
+@router.post('/products', response_model=ProductOut, status_code=status.HTTP_201_CREATED)
+def create_product(body: ProductCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    product=Product(**body.model_dump()); db.add(product); db.commit(); db.refresh(product); return product
+
+@router.get('/products/{product_id}/skus', response_model=list[SkuOut])
+def skus(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return list(db.scalars(select(ProductSku).where(ProductSku.product_id==product_id).order_by(ProductSku.id)))
+
+@router.post('/products/{product_id}/skus', response_model=SkuOut, status_code=status.HTTP_201_CREATED)
+def create_sku(product_id: int, body: SkuCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
+    if db.scalar(select(ProductSku).where(ProductSku.product_id==product_id,ProductSku.sku_code==body.sku_code)): raise HTTPException(status_code=409, detail={'code':'conflict','message':'SKU 编码已存在'})
+    sku=ProductSku(product_id=product_id,sku_code=body.sku_code,sku_name=body.sku_name,price=body.price); db.add(sku); db.flush(); db.add(InventoryItem(sku_id=sku.id,stock_qty=body.stock_qty,warning_threshold=body.warning_threshold)); db.commit(); db.refresh(sku); return sku
+
+@router.post('/products/{product_id}/skus/{sku_id}/inventory-adjustments')
+def adjust_inventory(product_id: int, sku_id: int, body: InventoryAdjustment, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    sku=db.scalar(select(ProductSku).where(ProductSku.id==sku_id,ProductSku.product_id==product_id)); item=db.scalar(select(InventoryItem).where(InventoryItem.sku_id==sku_id)) if sku else None
+    if not sku or not item: raise HTTPException(status_code=404, detail={'code':'not_found','message':'SKU 不存在'})
+    after=item.stock_qty+body.change_qty
+    if after<0: raise HTTPException(status_code=400, detail={'code':'validation_error','message':'库存不能小于 0'})
+    before=item.stock_qty; item.stock_qty=after; db.commit(); return {'sku_id':sku_id,'before_qty':before,'after_qty':after}
