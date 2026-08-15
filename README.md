@@ -49,7 +49,7 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-前端切换到生产 API：在浏览器控制台执行 `window.API_BASE='http://127.0.0.1:8001/api/v1'` 后刷新页面；正式前端构建时将该值写入环境配置。
+前端切换到生产 API：在浏览器控制台执行 `localStorage.setItem('API_BASE','http://127.0.0.1:8001/api/v1'); location.reload()`；恢复同源演示可执行 `localStorage.removeItem('API_BASE'); location.reload()`。
 
 ## 生产替换边界
 
