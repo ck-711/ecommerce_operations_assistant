@@ -1,10 +1,17 @@
 from logging.config import fileConfig
+from pathlib import Path
+import sys
+
+# Alembic may run with migrations/ as sys.path[0] inside containers.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from backend.db import Base
+from backend.core.config import settings
 from backend import models  # noqa: F401
 
 config = context.config
+config.set_main_option('sqlalchemy.url', settings.database_url.replace('%', '%%'))
 if config.config_file_name: fileConfig(config.config_file_name)
 target_metadata = Base.metadata
 
