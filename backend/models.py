@@ -74,6 +74,16 @@ class AdExperiment(Base):
     id: Mapped[int] = mapped_column(primary_key=True); product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
     experiment_name: Mapped[str] = mapped_column(String(200)); experiment_status: Mapped[str] = mapped_column(String(30), default='draft')
 
+class AdRecommendation(Base):
+    __tablename__ = 'ad_recommendations'
+    id: Mapped[int] = mapped_column(primary_key=True); product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    summary_text: Mapped[str] = mapped_column(String(2000)); confirm_status: Mapped[str] = mapped_column(String(30), default='pending')
+
+class ReviewReport(Base):
+    __tablename__ = 'review_reports'
+    id: Mapped[int] = mapped_column(primary_key=True); product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), index=True)
+    summary_text: Mapped[str] = mapped_column(String(2000), default='')
+
 class ProductSku(Base):
     __tablename__ = 'product_skus'
     id: Mapped[int] = mapped_column(primary_key=True)

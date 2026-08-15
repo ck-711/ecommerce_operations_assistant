@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.core.security import create_access_token, decode_access_token
 from backend.db import get_db
-from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store, ProductDiagnosis, CreativePlan, GeneratedAsset, PerformanceRecord, PromotionLink, AdExperiment
-from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut, PerformanceCreate, PerformanceOut, PromotionLinkCreate, PromotionLinkOut, ExperimentCreate, ExperimentOut
+from backend.models import User, Product, ProductSku, InventoryItem, GenerationJob, Store, ProductDiagnosis, CreativePlan, GeneratedAsset, PerformanceRecord, PromotionLink, AdExperiment, AdRecommendation, ReviewReport
+from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate, ProductOut, SkuCreate, SkuOut, InventoryAdjustment, GenerationJobCreate, GenerationJobOut, StoreCreate, StoreOut, DiagnosisOut, CreativePlanCreate, CreativePlanOut, AssetReview, AssetOut, PerformanceCreate, PerformanceOut, PromotionLinkCreate, PromotionLinkOut, ExperimentCreate, ExperimentOut, AdRecommendationOut, ReviewReportOut, Confirmation
 import uuid
 from backend.worker import execute_generation_job
 
@@ -88,6 +88,23 @@ def promotion_link(product_id: int, body: PromotionLinkCreate, user: User = Depe
 def experiment(product_id: int, body: ExperimentCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
     item=AdExperiment(product_id=product_id,experiment_name=body.experiment_name); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.post('/products/{product_id}/ad-recommendations/generate', response_model=AdRecommendationOut, status_code=status.HTTP_201_CREATED)
+def recommendation(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=AdRecommendation(product_id=product_id,summary_text='先小预算测试高意向人群，再根据转化扩量'); db.add(item); db.commit(); db.refresh(item); return item
+
+@router.patch('/products/{product_id}/ad-recommendations/{recommendation_id}/confirmation', response_model=AdRecommendationOut)
+def confirm_recommendation(product_id: int, recommendation_id: int, body: Confirmation, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=db.scalar(select(AdRecommendation).where(AdRecommendation.id==recommendation_id,AdRecommendation.product_id==product_id))
+    if not item: raise HTTPException(status_code=404, detail={'code':'not_found','message':'投放建议不存在'})
+    item.confirm_status=body.confirm_status; db.commit(); db.refresh(item); return item
+
+@router.post('/products/{product_id}/review-reports/generate', response_model=ReviewReportOut, status_code=status.HTTP_201_CREATED)
+def review_report(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
+    item=ReviewReport(product_id=product_id,summary_text='复盘报告已生成：请结合曝光、点击、转化和 ROI 调整下一轮素材测试。'); db.add(item); db.commit(); db.refresh(item); return item
 
 @router.get('/products', response_model=list[ProductOut])
 def products(user: User = Depends(current_user), db: Session = Depends(get_db)):

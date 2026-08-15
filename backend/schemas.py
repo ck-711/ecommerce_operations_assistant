@@ -78,6 +78,12 @@ class ExperimentCreate(BaseModel):
     experiment_name: str = Field(min_length=1)
 class ExperimentOut(ExperimentCreate):
     id: int; product_id: int; experiment_status: str; model_config = {'from_attributes': True}
+class AdRecommendationOut(BaseModel):
+    id: int; product_id: int; summary_text: str; confirm_status: str; model_config = {'from_attributes': True}
+class ReviewReportOut(BaseModel):
+    id: int; product_id: int; summary_text: str; model_config = {'from_attributes': True}
+class Confirmation(BaseModel):
+    confirm_status: str = Field(pattern='^(confirmed|rejected)$')
 
 class ProductOut(ProductCreate):
     id: int
