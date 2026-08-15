@@ -10,6 +10,7 @@ from backend.schemas import LoginRequest, TokenResponse, UserOut, ProductCreate,
 import uuid
 from backend.worker import execute_generation_job
 from backend.ai_provider import get_ai_provider
+from backend.workflows import run_diagnosis
 
 router = APIRouter(prefix='/api/v1')
 bearer = HTTPBearer(auto_error=False)
@@ -54,7 +55,7 @@ def create_store(body: StoreCreate, user: User = Depends(current_user), db: Sess
 def create_diagnosis(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role == 'viewer': raise HTTPException(status_code=403, detail={'code':'forbidden','message':'查看人员无写权限'})
     if not db.get(Product, product_id): raise HTTPException(status_code=404, detail={'code':'not_found','message':'商品不存在'})
-    product=db.get(Product, product_id); result=get_ai_provider().diagnose_product(product.name, product.category); item=ProductDiagnosis(product_id=product_id,positioning=result['positioning'],recommendations=result['recommendations']); db.add(item); db.commit(); db.refresh(item); return item
+    product=db.get(Product, product_id); result=run_diagnosis(product.name, product.category); item=ProductDiagnosis(product_id=product_id,positioning=result['positioning'],recommendations=result['recommendations']); db.add(item); db.commit(); db.refresh(item); return item
 
 @router.get('/products/{product_id}/diagnoses', response_model=list[DiagnosisOut])
 def diagnoses(product_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)): return list(db.scalars(select(ProductDiagnosis).where(ProductDiagnosis.product_id==product_id).order_by(ProductDiagnosis.id.desc())))
