@@ -51,6 +51,8 @@ docker compose -f docker-compose.prod.yml up --build
 
 前端切换到生产 API：在浏览器控制台执行 `localStorage.setItem('API_BASE','http://127.0.0.1:8001/api/v1'); location.reload()`；恢复同源演示可执行 `localStorage.removeItem('API_BASE'); location.reload()`。
 
+生产 AI 工作流要求安装并配置真实 Provider：`AI_PROVIDER` 默认为 `openai`，未配置真实适配器会明确报错；仅本地测试可设置 `AI_PROVIDER=demo`。
+
 ## 生产替换边界
 
 当前使用 Python 标准库、SQLite、内存 token 和确定性演示 worker。生产环境应替换为 JWT、PostgreSQL、Redis/Celery、对象存储和真实 AI/平台适配器；系统不会保存明文平台 token/cookie，也不会自动执行投放或扣费。
