@@ -40,7 +40,10 @@ class Handler(BaseHTTPRequestHandler):
         elif p=='/api/v1/products': out=rows(c,'select p.*,s.store_name from products p join stores s on s.id=p.store_id order by p.id desc')
         elif p.startswith('/api/v1/products/'):
             pid=p.split('/')[4]; out=one(c,'select * from products where id=?',(pid,))
-            if out: out['competitors']=rows(c,'select * from competitors where product_id=?',(pid,)); out['diagnoses']=rows(c,'select * from product_diagnoses where product_id=? order by id desc',(pid,)); out['plans']=rows(c,'select * from creative_plans where product_id=? order by id desc',(pid,)); out['jobs']=rows(c,'select * from generation_jobs where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
+            if out:
+                out['competitors']=rows(c,'select * from competitors where product_id=?',(pid,)); out['diagnoses']=rows(c,'select * from product_diagnoses where product_id=? order by id desc',(pid,)); out['plans']=rows(c,'select * from creative_plans where product_id=? order by id desc',(pid,)); out['jobs']=rows(c,'select * from generation_jobs where product_id=? order by id desc',(pid,));
+                for j in out['jobs']: j['events']=rows(c,'select * from generation_job_events where job_id=? order by id',(j['id'],))
+                out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
         else: out={'code':'not_found','message':'资源不存在','details':{}}
         c.close(); self.send(200 if not isinstance(out,dict) or 'code' not in out else 404,out)
     def do_POST(self):
@@ -58,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         elif p=='/api/v1/products': c.execute('insert into products(store_id,name,platform,category,price,cost,target_audience,selling_points,status,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)',(data['store_id'],data['name'],data.get('platform','other'),data.get('category',''),data.get('price',0),data.get('cost',0),data.get('target_audience',''),data.get('selling_points',''),'draft',t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0]}
         elif p.endswith('/diagnoses/generate'):
             pid=p.split('/')[4]; d={'positioning':'高性价比通勤防晒单品','price_band':'50-99 元','audience_insights':'一二线城市通勤女性，重视便携与防晒','pain_points':'笨重、收纳不便、遮阳不足','selling_point_analysis':'轻量与便携是核心差异点','risks':'同质化、季节性波动','recommendations':'强化收纳演示，增加防晒效果对比'}; c.execute('insert into product_diagnoses(product_id,positioning,price_band,audience_insights,pain_points,selling_point_analysis,risks,recommendations,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?)',(pid,*d.values(),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],**d}
-        elif '/creative-plans/' in p and p.endswith('/generate'):
+        elif '/creative-plans/' in p and p.endswith('/generate') and not (p.endswith('/images/generate') or p.endswith('/videos/generate')):
             pid=p.split('/')[4]; typ=p.split('/')[6]; items=[{'方案标题':'通勤痛点对比','画面结构':'地铁口→展开→遮阳对比','核心文案':'轻到忘记带伞','突出卖点':'轻量便携','方案理由':'三秒展示使用价值'},{'方案标题':'包内收纳','画面结构':'手袋空间→收纳','核心文案':'随身不占地','突出卖点':'超薄收纳','方案理由':'降低携带顾虑'},{'方案标题':'防晒实测','画面结构':'阳光下左右对比','核心文案':'看得见的遮阳','突出卖点':'遮阳效果','方案理由':'用证据建立信任'}]; content=[dict(x,**({'开头钩子':'出门最怕什么？','镜头分镜':'3 个快切镜头','口播文案':'轻便防晒，通勤必备','转化引导':'点击了解'} if typ=='video-scripts' else {})) for x in items]; c.execute('insert into creative_plans(product_id,plan_type,title,content_json,created_at,updated_at) values(?,?,?,?,?,?)',(pid,typ,typ+' 方案',jdump(content),t,t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],'plan_type':typ,'content':content}
         elif '/creative-plans/' in p and (p.endswith('/images/generate') or p.endswith('/videos/generate')):
             bits=p.split('/'); pid=bits[4]; plan_id=bits[6]; kind='image' if p.endswith('/images/generate') else 'video'; c.execute('insert into generation_jobs(product_id,creative_plan_id,job_kind,created_at) values(?,?,?,?)',(pid,plan_id,kind,t)); jid=c.execute('select last_insert_rowid()').fetchone()[0]; c.execute('insert into generation_job_events(job_id,event_type,event_message,created_at) values(?,?,?,?)',(jid,'queued','任务已入队',t)); out={'id':jid,'job_status':'pending'}
@@ -72,11 +75,23 @@ class Handler(BaseHTTPRequestHandler):
             pid=p.split('/')[4]; rec=one(c,'select coalesce(sum(impressions),0) impressions,coalesce(sum(clicks),0) clicks,coalesce(sum(conversions),0) conversions,coalesce(sum(spend),0) spend,coalesce(sum(revenue),0) revenue,min(period_start) period_start,max(period_end) period_end from performance_records where product_id=?',(pid,)); ctr=(rec['clicks']/rec['impressions'] if rec['impressions'] else 0); roi=(rec['revenue']/rec['spend'] if rec['spend'] else 0); summary=f"累计曝光 {rec['impressions']}，点击 {rec['clicks']}，转化 {rec['conversions']}，CTR {ctr:.2%}，ROI {roi:.2f}"; c.execute('insert into review_reports(product_id,period_start,period_end,summary_text,insights_json,next_actions_json,created_at) values(?,?,?,?,?,?,?)',(pid,rec['period_start'],rec['period_end'],summary,jdump(['关注点击到转化的漏斗损耗']),jdump(['测试防晒实测主图','补充高意向人群素材']),t)); out={'id':c.execute('select last_insert_rowid()').fetchone()[0],'summary_text':summary}
         else: out={'code':'not_found','message':'接口不存在','details':{}}; status=404
         c.commit(); c.close(); self.send(status,out)
+    def do_PATCH(self):
+        p=urlparse(self.path).path; data=self.body(); u=self.auth(True)
+        if not u:return
+        c=db(); t=now(); out=None; status=200
+        if '/assets/' in p:
+            bits=p.split('/'); pid,aid=bits[4],bits[6]; asset=one(c,'select * from generated_assets where id=? and product_id=?',(aid,pid))
+            if not asset: out={'code':'not_found','message':'素材不存在','details':{}}; status=404
+            elif data.get('review_status') not in (None,'pending','approved','rejected') or (data.get('score') is not None and not 0<=float(data['score'])<=5): out={'code':'validation_error','message':'审核状态或评分无效','details':{}}; status=400
+            else:
+                c.execute('update generated_assets set review_status=coalesce(?,review_status),score=coalesce(?,score),tags_json=coalesce(?,tags_json),remark=coalesce(?,remark),usage_scene=coalesce(?,usage_scene),updated_at=? where id=?',(data.get('review_status'),data.get('score'),jdump(data['tags']) if 'tags' in data else None,data.get('remark'),data.get('usage_scene'),t,aid)); out=one(c,'select * from generated_assets where id=?',(aid,))
+        else: out={'code':'not_found','message':'接口不存在','details':{}}; status=404
+        c.commit(); c.close(); self.send(status,out)
 def worker():
     while True:
         c=db(); jobs=rows(c,'select * from generation_jobs where job_status="pending"');
         for j in jobs:
-            c.execute('update generation_jobs set job_status="running",started_at=? where id=?',(now(),j['id'])); c.execute('insert into generation_job_events(job_id,event_type,event_message,created_at) values(?,?,?,?)',(j['id'],'running','任务开始执行',now())); c.commit(); time.sleep(.15); c.execute('update generation_jobs set job_status="succeeded",finished_at=?,result_json=? where id=?',(now(),jdump({'asset_url':'/demo-assets/'+str(j['id'])+'.png'}),j['id'])); c.execute('insert into generation_job_events(job_id,event_type,event_message,created_at) values(?,?,?,?)',(j['id'],'succeeded','演示素材已生成',now())); c.commit()
+            c.execute('update generation_jobs set job_status="running",started_at=? where id=?',(now(),j['id'])); c.execute('insert into generation_job_events(job_id,event_type,event_message,created_at) values(?,?,?,?)',(j['id'],'running','任务开始执行',now())); c.commit(); time.sleep(.15); asset_url='/demo-assets/'+str(j['id'])+'.'+('mp4' if j['job_kind']=='video' else 'png'); c.execute('update generation_jobs set job_status="succeeded",finished_at=?,result_json=? where id=?',(now(),jdump({'asset_url':asset_url}),j['id'])); c.execute('insert into generation_job_events(job_id,event_type,event_message,created_at) values(?,?,?,?)',(j['id'],'succeeded','演示素材已生成',now())); c.execute('insert or ignore into generated_assets(product_id,creative_plan_id,job_id,asset_type,asset_url,created_at,updated_at) values(?,?,?,?,?,?,?)',(j['product_id'],j['creative_plan_id'],j['id'],j['job_kind'],asset_url,now(),now())); c.commit()
         c.close(); time.sleep(1)
 if __name__=='__main__':
     init(); threading.Thread(target=worker,daemon=True).start(); print('Ecommerce assistant: http://127.0.0.1:8000'); ThreadingHTTPServer(('127.0.0.1',8000),Handler).serve_forever()
