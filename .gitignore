@@ -165,4 +165,5 @@ cython_debug/
 # Local runtime data / IDE state
 ecommerce.db
 .idea/claudeCodeTabState.xml
+.docker-config/
 

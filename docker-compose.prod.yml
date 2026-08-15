@@ -9,7 +9,7 @@ services:
     depends_on: [mysql, redis]
     ports: ["8001:8001"]
   mysql:
-    image: mysql:8.4
+    image: docker.m.daocloud.io/library/mysql:8.4
     environment:
       MYSQL_DATABASE: ecommerce
       MYSQL_USER: ecommerce
@@ -18,7 +18,7 @@ services:
     ports: ["3306:3306"]
     volumes: [mysql_data:/var/lib/mysql]
   redis:
-    image: redis:7-alpine
+    image: docker.m.daocloud.io/library/redis:7-alpine
     ports: ["6379:6379"]
 volumes:
   mysql_data:
