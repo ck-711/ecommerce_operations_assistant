@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
                 for j in out['jobs']: j['events']=rows(c,'select * from generation_job_events where job_id=? order by id',(j['id'],))
                 out['skus']=rows(c,'select k.*,coalesce(i.stock_qty,0) stock_qty,coalesce(i.locked_qty,0) locked_qty,coalesce(i.warning_threshold,10) warning_threshold,(coalesce(i.stock_qty,0)<=coalesce(i.warning_threshold,10)) low_stock from product_skus k left join inventory_items i on i.sku_id=k.id where k.product_id=? order by k.id',(pid,)); out['inventory_movements']=rows(c,'select m.* from inventory_movements m join product_skus k on k.id=m.sku_id where k.product_id=? order by m.id desc',(pid,)); out['links']=rows(c,'select * from promotion_links where product_id=? order by id desc',(pid,)); out['ad_recommendations']=rows(c,'select * from ad_recommendations where product_id=? order by id desc',(pid,)); out['ad_experiments']=rows(c,'select * from ad_experiments where product_id=? order by id desc',(pid,)); out['assets']=rows(c,'select * from generated_assets where product_id=? order by id desc',(pid,)); out['performance']=rows(c,'select * from performance_records where product_id=? order by id desc',(pid,)); out['reports']=rows(c,'select * from review_reports where product_id=? order by id desc',(pid,))
         else: out={'code':'not_found','message':'资源不存在','details':{}}
-        c.close(); self.send(200 if not isinstance(out,dict) or 'code' not in out else 404,out)
+        c.close(); self.send(200 if not isinstance(out,dict) or 'code' not in out else ({'forbidden':403,'not_found':404}.get(out.get('code'),400)),out)
     def do_POST(self):
         p=urlparse(self.path).path; data=self.body()
         if p=='/api/v1/auth/login':

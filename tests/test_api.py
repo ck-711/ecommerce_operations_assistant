@@ -1,4 +1,4 @@
-import json, os, threading, time, unittest, urllib.request
+import json, os, threading, time, unittest, urllib.error, urllib.request
 from app import init, Handler, ThreadingHTTPServer, worker
 class ApiTest(unittest.TestCase):
     @classmethod
@@ -17,4 +17,8 @@ class ApiTest(unittest.TestCase):
         dashboard=self.req('/workspace/dashboard',token=t); self.assertGreaterEqual(dashboard['low_stock_skus'],1); csv='product_id,sku_code,sku_name,price,stock_qty,warning_threshold\n'+str(pid)+',S-2,红色,89,8,5\n'+str(pid)+',S-3,,89,1,5\n'; preview=self.req('/workspace/imports/sku-inventory/preview',{'csv_text':csv},t); self.assertEqual(preview['valid_rows'],1); result=self.req('/workspace/imports/sku-inventory/commit',{'csv_text':csv},t); self.assertEqual(result['success_count'],1)
         store=self.req('/stores/'+str(demo['store_id']),token=t); self.assertEqual(store['product_count'],1); competitor=self.req('/products/'+str(pid)+'/competitors',{'name':'竞品','price':69},t); self.assertIn('id',competitor); link=self.req('/products/'+str(pid)+'/promotion-links',{'link_name':'测试链接','target_url':'https://example.com'},t); self.assertIn('tracking_code',link); ad=self.req('/products/'+str(pid)+'/ad-recommendations/generate',{},t); self.assertEqual(ad['confirm_status'],'pending')
         users=self.req('/users',token=t); self.assertEqual(len(users),3); account=self.req('/stores/'+str(demo['store_id'])+'/platform-accounts',{'platform':'taobao','account_name':'演示账号'},t); self.assertEqual(account['auth_status'],'not_connected'); confirmed=self.req('/products/'+str(pid)+'/ad-recommendations/'+str(ad['id'])+'/confirmation',{'confirm_status':'confirmed'},t,method='PATCH'); self.assertEqual(confirmed['confirm_status'],'confirmed'); exp=self.req('/products/'+str(pid)+'/ad-experiments',{'experiment_name':'主图 A/B'},t); self.assertEqual(exp['experiment_status'],'draft'); exp2=self.req('/products/'+str(pid)+'/ad-experiments/'+str(exp['id']),{'experiment_status':'confirmed'},t,method='PATCH'); self.assertEqual(exp2['experiment_status'],'confirmed')
+    def test_viewer_cannot_write_or_manage_users(self):
+        d=self.req('/auth/login',{'username':'viewer','password':'viewer123'}); t=d['access_token']
+        with self.assertRaises(urllib.error.HTTPError) as e: self.req('/users',token=t)
+        self.assertEqual(e.exception.code,403)
 if __name__=='__main__': unittest.main()
